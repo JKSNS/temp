@@ -71,7 +71,7 @@ deface_or_stop_service() {
 
 manage_services() {
     while true; do
-        echo "Select the services to disable or deface (e.g., 1 2 3 for multiple choices):"
+        echo "Select the services to disable or deface:"
         echo "1) Drupal website (port 80)"
         echo "2) Payroll website app (port 8080)"
         echo "3) FTP service (port 21)"
