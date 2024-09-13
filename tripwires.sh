@@ -69,7 +69,7 @@ setup_tripwires() {
         echo "7) System-wide tripwires (modifies /etc/bash.bashrc)"
         echo "q) Quit"
         
-        read -r -p "Enter your choices (e.g., 1 2 3): " choice
+        read -r -p "Enter your choices: " choice
 
         case $choice in
             1) 
