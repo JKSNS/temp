@@ -6,6 +6,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Function to check and install required packages
+install_package() {
+    local package_name=$1
+    if ! dpkg -l | grep -qw "$package_name"; then
+        echo "Installing $package_name..."
+        sudo apt update
+        sudo apt install -y "$package_name"
+    else
+        echo "$package_name is already installed."
+    fi
+}
+
 # Function to create an alias
 set_alias() {
     local alias_command=$1
@@ -61,6 +73,7 @@ setup_tripwires() {
 
         case $choice in
             1) 
+                install_package "cowsay"
                 set_alias "ls" "cowsay 'Unauthorized Access Detected!'" "$HOME/.bashrc"
                 ;;
             2) 
@@ -79,6 +92,7 @@ setup_tripwires() {
                 add_background_process "cat" "echo 'cat command was executed' | logger" "$HOME/.bashrc"
                 ;;
             7) 
+                install_package "cowsay"
                 echo "Adding system-wide tripwires to /etc/bash.bashrc..."
                 sudo bash -c "echo 'alias ls=\"cowsay -f tux \\\"Suspicious activity detected!\\\"\"' >> /etc/bash.bashrc"
                 sudo bash -c "echo 'trap \"echo \\\"User \\\$USER used the cd command!\\\" | logger\" DEBUG' >> /etc/bash.bashrc"
