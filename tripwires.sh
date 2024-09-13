@@ -46,19 +46,19 @@ add_background_process() {
 
 # Function to set up various tripwires based on user selection
 setup_tripwires() {
-    echo "Choose the tripwire setup you would like to implement:"
-    echo "1) Alias for ls to cowsay"
-    echo "2) Alias for cat to reverse"
-    echo "3) Fake binary for curl"
-    echo "4) Fake binary for wget"
-    echo "5) Background monitor for ls command"
-    echo "6) Background monitor for cat command"
-    echo "7) System-wide tripwires (modifies /etc/bash.bashrc)"
-    echo "q) Quit"
-    
-    read -r -p "Enter your choices (e.g., 1 2 3): " choices
+    while true; do
+        echo "Choose the tripwire setup you would like to implement:"
+        echo "1) Alias for ls to cowsay"
+        echo "2) Alias for cat to reverse"
+        echo "3) Fake binary for curl"
+        echo "4) Fake binary for wget"
+        echo "5) Background monitor for ls command"
+        echo "6) Background monitor for cat command"
+        echo "7) System-wide tripwires (modifies /etc/bash.bashrc)"
+        echo "q) Quit"
+        
+        read -r -p "Enter your choices (e.g., 1 2 3): " choice
 
-    for choice in $choices; do
         case $choice in
             1) 
                 set_alias "ls" "cowsay 'Unauthorized Access Detected!'" "$HOME/.bashrc"
@@ -85,14 +85,16 @@ setup_tripwires() {
                 ;;
             q) 
                 echo "Exiting setup."
-                return
+                break
                 ;;
             *) 
                 echo "Invalid choice: $choice"
                 ;;
         esac
+
+        echo "Tripwire setup completed. Choose another option or press 'q' to quit."
     done
-    
+
     # Reload .bashrc to apply changes
     source "$HOME/.bashrc"
     echo "Tripwires have been set up on the system. Reload your terminal or run 'source ~/.bashrc' to apply changes."
