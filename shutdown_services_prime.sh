@@ -91,7 +91,10 @@ manage_services() {
             break
         fi
 
-        for choice in $choices; do
+        # Split input into an array of choices to handle multiple selections
+        IFS=' ' read -r -a choice_array <<< "$choices"
+
+        for choice in "${choice_array[@]}"; do
             case $choice in
                 1) block_service 80 "tcp"; deface_or_stop_service "drupal" ;;   # Drupal 
                 2) block_service 8080 "tcp"; deface_or_stop_service "payroll" ;; # Payroll
@@ -106,6 +109,8 @@ manage_services() {
                 *) echo "Invalid choice: $choice" ;;
             esac
         done
+
+        echo "Completed your selections. Choose another service to disable/deface or press 'q' to quit."
     done
 }
 
