@@ -1,19 +1,23 @@
-function Block-Service {
+function Disable-FirewallRule {
     param (
         [int]$ServicePort
     )
-    # Block both TCP and UDP
     $protocols = @("TCP", "UDP")
     foreach ($protocol in $protocols) {
-        # Remove any existing rule allowing the port for the specific protocol
-        $removeAllowRule = "netsh advfirewall firewall delete rule name=`"Allow Port $ServicePort $protocol`" protocol=$protocol localport=$ServicePort"
-        Invoke-Expression $removeAllowRule
-
-        # Add rule to block the port for the specific protocol
-        $blockCommand = "netsh advfirewall firewall add rule name=`"Block Port $ServicePort $protocol`" dir=in action=block protocol=$protocol localport=$ServicePort"
-        Invoke-Expression $blockCommand
-
-        Write-Host "Blocked $ServicePort/$protocol and removed any existing allow rules."
+        $disableRule = "netsh advfirewall firewall set rule name=`"Allow Port $ServicePort $protocol`" new enable=no"
+        $disableBlockRule = "netsh advfirewall firewall set rule name=`"Block Port $ServicePort $protocol`" new enable=no"
+        try {
+            Invoke-Expression $disableRule
+            Write-Host "Disabled allow rule for port $ServicePort/$protocol."
+        } catch {
+            Write-Host "No allow rule found for port $ServicePort/$protocol."
+        }
+        try {
+            Invoke-Expression $disableBlockRule
+            Write-Host "Disabled block rule for port $ServicePort/$protocol."
+        } catch {
+            Write-Host "No block rule found for port $ServicePort/$protocol."
+        }
     }
 }
 
@@ -92,16 +96,16 @@ function Manage-Services {
         $choice_array = $choices -split '\s+'
         foreach ($choice in $choice_array) {
             switch ($choice) {
-                1 { Block-Service -ServicePort 80 -Protocol "tcp"; Deface-Or-Stop-Service -Service "drupal" }
-                2 { Block-Service -ServicePort 8080 -Protocol "tcp"; Deface-Or-Stop-Service -Service "payroll" }
-                3 { Block-Service -ServicePort 21 -Protocol "tcp" }   # FTP
-                4 { Block-Service -ServicePort 22 -Protocol "tcp" }   # SSH
-                5 { Block-Service -ServicePort 6667 -Protocol "tcp" } # IRC
-                6 { Block-Service -ServicePort 3500 -Protocol "tcp" } # Metasploitable
-                7 { Block-Service -ServicePort 9200 -Protocol "tcp"; Deface-Or-Stop-Service -Service "elasticsearch" }
-                8 { Block-Service -ServicePort 3389 -Protocol "tcp"; Deface-Or-Stop-Service -Service "rdp" }
-                9 { Block-Service -ServicePort 445 -Protocol "tcp"; Deface-Or-Stop-Service -Service "smb" }
-                10 { Block-Service -ServicePort 8585 -Protocol "tcp"; Deface-Or-Stop-Service -Service "wordpress" }
+                1 { Disable-FirewallRule -ServicePort 80; Deface-Or-Stop-Service -Service "drupal" }
+                2 { Disable-FirewallRule -ServicePort 8080; Deface-Or-Stop-Service -Service "payroll" }
+                3 { Disable-FirewallRule -ServicePort 21 }   # FTP
+                4 { Disable-FirewallRule -ServicePort 22 }   # SSH
+                5 { Disable-FirewallRule -ServicePort 6667 } # IRC
+                6 { Disable-FirewallRule -ServicePort 3500 } # Metasploitable
+                7 { Disable-FirewallRule -ServicePort 9200; Deface-Or-Stop-Service -Service "elasticsearch" }
+                8 { Disable-FirewallRule -ServicePort 3389; Deface-Or-Stop-Service -Service "rdp" }
+                9 { Disable-FirewallRule -ServicePort 445; Deface-Or-Stop-Service -Service "smb" }
+                10 { Disable-FirewallRule -ServicePort 8585; Deface-Or-Stop-Service -Service "wordpress" }
                 default { Write-Host "Invalid choice: $choice" }
             }
         }
