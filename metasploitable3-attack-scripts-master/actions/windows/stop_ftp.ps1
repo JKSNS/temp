@@ -1,0 +1,1 @@
+(Get-Website -Name FTP).ftpserver.stop()

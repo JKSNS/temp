@@ -1,0 +1,8 @@
+pwntools
+requests
+pyyaml
+beautifulsoup4
+fabric
+sliver-py
+prettytable
+inquirer
