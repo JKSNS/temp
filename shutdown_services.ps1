@@ -1,14 +1,19 @@
 function Block-Service {
     param (
-        [int]$ServicePort,
-        [string]$Protocol
+        [int]$ServicePort
     )
-    $protocol = $Protocol.ToUpper()
-    if ($protocol -eq "TCP" -or $protocol -eq "UDP") {
-        New-NetFirewallRule -DisplayName "Block Port $ServicePort $Protocol" -Direction Inbound -LocalPort $ServicePort -Protocol $Protocol -Action Block
-        Write-Host "Blocked $ServicePort/$Protocol."
-    } else {
-        Write-Host "Invalid protocol specified: $Protocol"
+    # Block both TCP and UDP
+    $protocols = @("TCP", "UDP")
+    foreach ($protocol in $protocols) {
+        # Remove any existing rule allowing the port for the specific protocol
+        $removeAllowRule = "netsh advfirewall firewall delete rule name=`"Allow Port $ServicePort $protocol`" protocol=$protocol localport=$ServicePort"
+        Invoke-Expression $removeAllowRule
+
+        # Add rule to block the port for the specific protocol
+        $blockCommand = "netsh advfirewall firewall add rule name=`"Block Port $ServicePort $protocol`" dir=in action=block protocol=$protocol localport=$ServicePort"
+        Invoke-Expression $blockCommand
+
+        Write-Host "Blocked $ServicePort/$protocol and removed any existing allow rules."
     }
 }
 
@@ -26,12 +31,19 @@ function Deface-Or-Stop-Service {
         "payroll" {
             Write-Host "Stopping Payroll website service..."
             Stop-Service -Name "W3SVC" -Force
+            
+            $payrollPath = "C:\inetpub\wwwroot\payroll"
+            if (-not (Test-Path -Path $payrollPath)) {
+                Write-Host "Creating Payroll directory..."
+                New-Item -ItemType Directory -Path $payrollPath
+            }
+            
             Write-Host "Defacing Payroll website..."
-            "<h1>Payroll Site Down!</h1><p>Maintenance in progress.</p>" | Out-File "C:\inetpub\wwwroot\payroll\index.html" -Encoding UTF8
+            "<h1>Payroll Site Down!</h1><p>Maintenance in progress.</p>" | Out-File "$payrollPath\index.html" -Encoding UTF8
         }
         "elasticsearch" {
             Write-Host "Stopping Elasticsearch service..."
-            Stop-Service -Name "elasticsearch" -Force
+            Stop-Service -Name "elasticsearch-service-x64" -Force
             Write-Host "Elasticsearch service stopped."
         }
         "wordpress" {
