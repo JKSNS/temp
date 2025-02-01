@@ -28,7 +28,6 @@ setup_scripts() {
   echo "[*] Installing required packages..."
   case "$pm" in
     "apt")
-      sudo apt update -y
       sudo apt install nmap git -y
       ;;
     "dnf")
@@ -64,9 +63,9 @@ setup_scripts() {
     echo "[*] Extracting cve.csv archive..."
     tar -xzvf cve.csv.tar.gz
 
-    # Remove the tarball after extraction
+    # Remove the tarball after successful extraction
     if [ -f "cve.csv" ]; then
-      echo "[*] Removing cve.csv.tar.gz after successful extraction."
+      echo "[*] Removing cve.csv.tar.gz after extraction."
       rm cve.csv.tar.gz
     fi
   fi
@@ -82,11 +81,11 @@ setup_scripts() {
 }
 
 scan_hosts() {
-  # Create a human-readable timestamp in the format Month-Day-Year-Hour-Minute-Second.
-  timestamp=$(date +"%m-%d-%Y-%H-%M-%S")
+  # Create a timestamp in the format MM-DD--HH:MM:SS (e.g., 01-31--23:37:03)
+  timestamp=$(date +"%m-%d--%H:%M:%S")
   
   # Create the main output directory.
-  outdir="vulnscan-results-$timestamp"
+  outdir="vulscan-results--$timestamp"
   mkdir "$outdir"
   
   # Create subdirectory for individual results.
@@ -95,21 +94,21 @@ scan_hosts() {
 
   echo "[*] Scanning hosts from file: $1"
   
-  # Process each line from the provided hosts file.
+  # Process each line in the provided hosts file.
   while IFS= read -r line || [[ -n "$line" ]]; do
       # Skip blank lines.
       [ -z "$line" ] && continue
 
       echo "[*] Scanning $line..."
-      # Replace any "/" in the host string with "_" (for safe filenames)
+      # Replace any "/" in the host string with "_" for a safe filename.
       host_safe=$(echo "$line" | tr '/' '_')
       output_file="$individual_dir/results-$host_safe.txt"
       
       nmap -sV --script=vulscan/vulscan.nse --script-args "vulscandb=cve.csv, vulscanoutput='{id} | {product} | {version} | {title}\n'" "$line" > "$output_file"
   done < "$1"
 
-  # Combine all individual results into a comprehensive file.
-  comprehensive_file="$outdir/comprehensive-vulnscan-results-$timestamp.txt"
+  # Combine all individual scan results into a comprehensive file.
+  comprehensive_file="$outdir/comprehensive--$timestamp.txt"
   cat "$individual_dir"/* > "$comprehensive_file"
   echo "[*] Combined scan results saved in '$comprehensive_file'"
 }
