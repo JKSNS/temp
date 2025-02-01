@@ -86,12 +86,13 @@ scan_hosts() {
   
   # Determine a unique iteration prefix for the output directory.
   prefix=1
-  while [ -d "${prefix}-vulscan-results--${timestamp}" ]; do
+  outdir="${prefix}-vulscan-results--${timestamp}"
+  while [ -d "$outdir" ]; do
       prefix=$((prefix+1))
+      outdir="${prefix}-vulscan-results--${timestamp}"
   done
   
-  # Create the main output directory with the iteration prefix.
-  outdir="${prefix}-vulscan-results--${timestamp}"
+  # Create the main output directory.
   mkdir "$outdir"
   
   # Create subdirectory for individual results.
