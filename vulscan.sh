@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Global variable to store the detected package manager
+# Global variable for the package manager
 pm=""
 
 # Function to detect the OS package manager
@@ -22,7 +22,7 @@ detect_os() {
 }
 
 setup_scripts() {
-  # Detect package manager before installing packages
+  # Detect the OS/package manager first.
   detect_os
 
   echo "[*] Installing required packages..."
@@ -42,33 +42,56 @@ setup_scripts() {
       ;;
   esac
 
-  echo "[*] Cloning vulscan repository..."
-  git clone https://github.com/scipag/vulscan scipag_vulscan
+  # Clone the vulscan repository if it isn't already present.
+  if [ -d "scipag_vulscan" ]; then
+    echo "[*] 'scipag_vulscan' directory already exists. Skipping clone."
+  else
+    echo "[*] Cloning vulscan repository..."
+    git clone https://github.com/scipag/vulscan scipag_vulscan
+  fi
 
-  echo "[*] Downloading cve.csv archive..."
-  wget https://raw.githubusercontent.com/BYU-CCDC/public-ccdc-resources/main/linux/cve.csv.tar.gz
+  # Download cve.csv.tar.gz if not already downloaded.
+  if [ -f "cve.csv.tar.gz" ]; then
+    echo "[*] 'cve.csv.tar.gz' already exists. Skipping download."
+  else
+    echo "[*] Downloading cve.csv archive..."
+    wget https://raw.githubusercontent.com/BYU-CCDC/public-ccdc-resources/main/linux/cve.csv.tar.gz
+  fi
 
-  echo "[*] Extracting cve.csv archive..."
-  tar -xzvf cve.csv.tar.gz
+  # Extract cve.csv if it does not exist.
+  if [ -f "cve.csv" ]; then
+    echo "[*] 'cve.csv' already exists. Skipping extraction."
+  else
+    echo "[*] Extracting cve.csv archive..."
+    tar -xzvf cve.csv.tar.gz
+  fi
 
-  echo "[*] Installing vulscan scripts..."
-  sudo cp -r ./scipag_vulscan /usr/share/nmap/scripts/vulscan
-  sudo cp cve.csv /usr/share/nmap/scripts/vulscan/cve.csv
+  # Copy vulscan files into Nmap's script directory if not already present.
+  if [ -d "/usr/share/nmap/scripts/vulscan" ]; then
+    echo "[*] '/usr/share/nmap/scripts/vulscan' already exists. Skipping file copy."
+  else
+    echo "[*] Copying vulscan files..."
+    sudo cp -r ./scipag_vulscan /usr/share/nmap/scripts/vulscan
+    sudo cp cve.csv /usr/share/nmap/scripts/vulscan/cve.csv
+  fi
 }
 
 scan_hosts() {
-  timestamp=$(date +%s)
-  resultdir="results${timestamp}"
+  # Get a human-readable timestamp (e.g. 2025-01-31_14-30-15)
+  timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+  resultdir="individual-vulscan-results-$timestamp"
   mkdir "$resultdir"
-  
-  # Read each line from the provided hosts file
-  while IFS= read -r line || [ -n "$line" ]; do
-    echo "Scanning $line..."
-    nmap -sV --script=vulscan/vulscan.nse --script-args "vulscandb=cve.csv, vulscanoutput='{id} | {product} | {version} | {title}\n'" "$line" > "$resultdir/results-$line.txt"
+
+  echo "[*] Scanning hosts from file: $1"
+  # Process each line in the provided hosts file.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+      echo "[*] Scanning $line..."
+      nmap -sV --script=vulscan/vulscan.nse --script-args "vulscandb=cve.csv, vulscanoutput='{id} | {product} | {version} | {title}\n'" "$line" > "$resultdir/results-$line.txt"
   done < "$1"
-  
-  # Combine all individual scan results into one file
-  cat "$resultdir"/* > "completeresult${timestamp}"
+
+  # Combine all individual scan results into a single file.
+  cat "$resultdir"/* > "complete-vulscan-result.txt"
+  echo "[*] Combined scan results saved in 'complete-vulscan-result.txt'"
 }
 
 print_options() {
@@ -77,20 +100,21 @@ Usage: $0 [OPTION] [HOSTS FILE]
 
 Options:
   full      Sets up scanning utilities and scans using the hosts file.
-  setup     Sets up scanning utilities without attempting scans.
+  setup     Sets up scanning utilities without scanning.
   scan      Scans using the hosts file.
   help      Displays this help message.
 
-Note: The HOSTS FILE is a required argument for the full and scan options. The hosts file should have one scannable entry (URL, IP Address, CIDR, etc.) per line.
+Note: The HOSTS FILE is required for the 'full' and 'scan' options. The file should contain one scannable entry (URL, IP Address, CIDR, etc.) per line.
 "
 }
 
-# Check if at least one argument was provided
+# Ensure at least one argument is provided.
 if [ $# -lt 1 ]; then
   print_options
   exit 1
 fi
 
+# Parse command-line options.
 case $1 in
   "full")
     if [ $# -lt 2 ]; then
