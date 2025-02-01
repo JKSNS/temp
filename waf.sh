@@ -1,16 +1,8 @@
 #!/bin/bash
-#
+
 # install_modsecurity.sh
-#
-# This script installs Apache with ModSecurity (including the OWASP Core Rule Set)
-# using secure defaults that help protect against common attacks like XSS and SQL Injection.
-#
-# It will prompt you for a few options (like your web server's domain or IP and file locations)
-# but uses secure defaults if you just press Enter.
-#
-# IMPORTANT: Run this script as root or with sudo privileges.
-#
-# Logs are saved to /var/log/modsecurity_install_log.txt
+# This script installs Apache with ModSecurity and OWASP CRS using secure defaults.
+# It automatically detects the operating system type and adjusts file paths accordingly.
 
 #######################################
 # Function: log_event
@@ -23,7 +15,7 @@ log_event() {
 }
 
 #######################################
-# Check for root/sudo privileges
+# Ensure the script is run as root
 #######################################
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script as root or with sudo."
@@ -31,28 +23,46 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 #######################################
-# Set default values and prompt for input
+# Detect Operating System
 #######################################
-# Default web server domain/IP (used in the test message)
-read -p "Enter your web server domain or IP address (default: localhost): " WEB_DOMAIN
-WEB_DOMAIN=${WEB_DOMAIN:-localhost}
+log_event "Detecting operating system..."
+if [ -f /etc/os-release ]; then
+    source /etc/os-release
+    OS=$ID
+else
+    log_event "ERROR: Unable to detect operating system."
+    exit 1
+fi
 
-# Default ModSecurity configuration directory
-read -p "Enter the ModSecurity configuration directory (default: /etc/modsecurity): " modsecConfDir
-modsecConfDir=${modsecConfDir:-/etc/modsecurity}
+#######################################
+# Set Variables Based on OS
+#######################################
+log_event "Configuring paths for $OS..."
+case "$OS" in
+    ubuntu|debian)
+        APACHE_CONF_DIR="/etc/apache2"
+        MODSEC_CONF_DIR="/etc/modsecurity"
+        MODSEC_CONFIG_FILE="$MODSEC_CONF_DIR/modsecurity.conf"
+        DEFAULT_SITE_CONF="$APACHE_CONF_DIR/sites-available/000-default.conf"
+        APACHE_TEST_CMD="apache2ctl configtest"
+        APACHE_RESTART_CMD="systemctl restart apache2"
+        ;;
+    fedora|centos|rhel)
+        APACHE_CONF_DIR="/etc/httpd"
+        MODSEC_CONF_DIR="/etc/modsecurity"
+        MODSEC_CONFIG_FILE="$MODSEC_CONF_DIR/modsecurity.conf"
+        DEFAULT_SITE_CONF="$APACHE_CONF_DIR/conf.d/default.conf"
+        APACHE_TEST_CMD="httpd -t"
+        APACHE_RESTART_CMD="systemctl restart httpd"
+        ;;
+    *)
+        log_event "ERROR: Unsupported operating system ($OS)."
+        exit 1
+        ;;
+esac
 
-# Default Apache site configuration file location
-read -p "Enter the path to your default Apache site config (default: /etc/apache2/sites-available/000-default.conf): " defaultSiteConf
-defaultSiteConf=${defaultSiteConf:-/etc/apache2/sites-available/000-default.conf}
-
-# Set the ModSecurity main configuration file path
-modsecConfigFile="$modsecConfDir/modsecurity.conf"
-
-# Apache mod_security include file (where additional config lines are added)
-apacheModsConf="/etc/apache2/mods-enabled/security2.conf"
-
-# Log file location
 logFile="/var/log/modsecurity_install_log.txt"
+WEB_DOMAIN="localhost"
 
 log_event "=== Starting ModSecurity installation and configuration ==="
 
@@ -60,39 +70,42 @@ log_event "=== Starting ModSecurity installation and configuration ==="
 # Step 1: Update system and install prerequisites
 #######################################
 log_event "Updating system packages..."
-apt update && apt upgrade -y
-
-log_event "Installing Apache, ModSecurity, wget, and unzip..."
-apt install -y apache2 libapache2-mod-security2 wget unzip
-
-log_event "Restarting Apache..."
-systemctl restart apache2
-
-#######################################
-# Step 2: Configure ModSecurity securely
-#######################################
-log_event "Configuring ModSecurity with secure defaults..."
-# Copy the recommended config if the main config file is not already set up.
-if [ ! -f "$modsecConfigFile" ]; then
-    cp "$modsecConfDir/modsecurity.conf-recommended" "$modsecConfigFile"
-    log_event "Copied recommended modsecurity.conf to $modsecConfigFile."
-else
-    log_event "ModSecurity config file already exists at $modsecConfigFile."
+if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
+    apt update && apt upgrade -y
+    apt install -y apache2 libapache2-mod-security2 wget unzip
+elif [[ "$OS" == "fedora" || "$OS" == "centos" || "$OS" == "rhel" ]]; then
+    dnf update -y
+    dnf install -y httpd mod_security wget unzip
 fi
 
-# Set ModSecurity to "On" (blocking mode) instead of just detecting issues.
-sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' "$modsecConfigFile"
-log_event "Set SecRuleEngine to On in $modsecConfigFile."
+log_event "Restarting Apache..."
+$APACHE_RESTART_CMD
 
 #######################################
-# Step 3: Download and install the OWASP Core Rule Set (CRS)
+# Step 2: Configure ModSecurity Securely
 #######################################
-log_event "Downloading the OWASP Core Rule Set (CRS)..."
-# Create a temporary directory for the download
+log_event "Configuring ModSecurity with secure defaults..."
+
+# If the main configuration file doesn't exist, copy the recommended default.
+if [ ! -f "$MODSEC_CONFIG_FILE" ]; then
+    cp "$MODSEC_CONF_DIR/modsecurity.conf-recommended" "$MODSEC_CONFIG_FILE"
+    log_event "Copied recommended modsecurity.conf to $MODSEC_CONFIG_FILE."
+else
+    log_event "ModSecurity configuration file already exists at $MODSEC_CONFIG_FILE."
+fi
+
+# Set ModSecurity to "On" (blocking mode).
+sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' "$MODSEC_CONFIG_FILE"
+log_event "Set SecRuleEngine to On in $MODSEC_CONFIG_FILE."
+
+#######################################
+# Step 3: Download and Install the OWASP Core Rule Set (CRS)
+#######################################
+log_event "Downloading and installing the OWASP Core Rule Set (CRS)..."
 tmpDir=$(mktemp -d)
-# Download the CRS (version 3.3.0 is used here; update URL if needed)
 CRS_URL="https://github.com/coreruleset/coreruleset/archive/v3.3.0.zip"
 CRS_ZIP="$tmpDir/coreruleset-3.3.0.zip"
+
 wget -O "$CRS_ZIP" "$CRS_URL"
 if [ $? -ne 0 ]; then
     log_event "ERROR: Could not download CRS from $CRS_URL."
@@ -107,66 +120,50 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Move the example CRS setup file and the rules directory into the ModSecurity directory.
-mv "$tmpDir/coreruleset-3.3.0/crs-setup.conf.example" "$modsecConfDir/crs-setup.conf"
-mv "$tmpDir/coreruleset-3.3.0/rules" "$modsecConfDir/"
-log_event "Installed CRS: crs-setup.conf and rules moved to $modsecConfDir."
+# Move CRS setup and rules to the ModSecurity directory.
+mv "$tmpDir/coreruleset-3.3.0/crs-setup.conf.example" "$MODSEC_CONF_DIR/crs-setup.conf"
+mv "$tmpDir/coreruleset-3.3.0/rules" "$MODSEC_CONF_DIR/"
+log_event "Installed CRS: crs-setup.conf and rules moved to $MODSEC_CONF_DIR."
 
-# Clean up temporary files
 rm -rf "$tmpDir"
 
 #######################################
-# Step 4: Update Apache configuration to load ModSecurity and CRS rules
+# Step 4: Update Apache Configuration to Load ModSecurity and CRS Rules
 #######################################
-log_event "Updating Apache mod_security configuration to include CRS rules..."
-# Ensure Apache loads all .conf files from the ModSecurity directory.
-if ! grep -q "IncludeOptional ${modsecConfDir}/*.conf" "$apacheModsConf"; then
-    echo "IncludeOptional ${modsecConfDir}/*.conf" >> "$apacheModsConf"
-    log_event "Added: IncludeOptional ${modsecConfDir}/*.conf"
-fi
+log_event "Updating Apache configuration to load ModSecurity and CRS rules..."
 
-# Ensure Apache loads all the CRS rules.
-if ! grep -q "Include ${modsecConfDir}/rules/*.conf" "$apacheModsConf"; then
-    echo "Include ${modsecConfDir}/rules/*.conf" >> "$apacheModsConf"
-    log_event "Added: Include ${modsecConfDir}/rules/*.conf"
-fi
+# Include ModSecurity and CRS configurations.
+echo "Include $MODSEC_CONF_DIR/*.conf" >> "$APACHE_CONF_DIR/conf.d/mod_security.conf"
+echo "Include $MODSEC_CONF_DIR/rules/*.conf" >> "$APACHE_CONF_DIR/conf.d/mod_security.conf"
 
 #######################################
-# Step 5: Add a simple test rule to verify ModSecurity is working
+# Step 5: Add a Test Rule to Verify ModSecurity is Active
 #######################################
 log_event "Adding a test rule to verify ModSecurity is active..."
-# The test rule below will block any request containing the parameter ?testparam=test.
-# It is inserted just before the closing </VirtualHost> tag in your default Apache site config.
-if ! grep -q "id:999" "$defaultSiteConf"; then
-    sed -i "/<\/VirtualHost>/ i\\
-<IfModule security2_module>\\
-    SecRuleEngine On\\
-    SecRule ARGS:testparam \"@contains test\" \"id:999,deny,status:403,msg:'Test Successful: ModSecurity is active.'\"\\
-</IfModule>" "$defaultSiteConf"
-    log_event "Test rule added to $defaultSiteConf. (Try accessing: http://${WEB_DOMAIN}/?testparam=test)"
-else
-    log_event "Test rule already exists in $defaultSiteConf."
-fi
+cat <<EOL >>"$DEFAULT_SITE_CONF"
+<IfModule security2_module>
+    SecRuleEngine On
+    SecRule ARGS:testparam "@contains test" "id:999,deny,status:403,msg:'Test Successful: ModSecurity is active.'"
+</IfModule>
+EOL
+
+log_event "Test rule added. Test using http://${WEB_DOMAIN}/?testparam=test"
 
 #######################################
-# Step 6: Test Apache configuration and restart Apache
+# Step 6: Test Apache Configuration and Restart Apache
 #######################################
 log_event "Testing Apache configuration..."
-apache2ctl configtest
+$APACHE_TEST_CMD
 if [ $? -ne 0 ]; then
     log_event "ERROR: Apache configuration test failed. Please review your settings."
     exit 1
 fi
 
 log_event "Restarting Apache to apply changes..."
-systemctl restart apache2
+$APACHE_RESTART_CMD
 
 #######################################
-# Final messages
+# Final Messages
 #######################################
-log_event "Installation and configuration complete."
-log_event "To test your setup, open a browser and visit: http://${WEB_DOMAIN}/?testparam=test"
-log_event "You should receive a 403 Forbidden response, and the Apache error log (typically /var/log/apache2/error.log) should show the 'Test Successful' message."
-log_event "Remember: Once testing is complete, consider removing or commenting out the test rule from $defaultSiteConf."
-
-echo "ModSecurity installation and setup completed successfully. See the log at $logFile for details."
+log_event "Installation and configuration complete. Visit http://${WEB_DOMAIN}/?testparam=test to test."
+log_event "ModSecurity log file: /var/log/httpd/modsec_audit.log (or similar)."
