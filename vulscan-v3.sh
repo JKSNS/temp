@@ -84,15 +84,27 @@ scan_hosts() {
   # Create a timestamp in the format MM-DD--HH:MM:SS (e.g., 01-31--23:47:27)
   timestamp=$(date +"%m-%d--%H:%M:%S")
   
-  # Determine a unique iteration prefix for the output directory.
+  # Determine a global iteration prefix by scanning for existing directories.
+  # This will find all directories that match the pattern "*-vulscan-results--*"
+  # and then choose the highest prefix number + 1.
   prefix=1
-  outdir="${prefix}-vulscan-results--${timestamp}"
-  while [ -d "$outdir" ]; do
-      prefix=$((prefix+1))
-      outdir="${prefix}-vulscan-results--${timestamp}"
-  done
+  existing_dirs=( $(ls -d [0-9]*-vulscan-results--* 2>/dev/null) )
+  if [ ${#existing_dirs[@]} -gt 0 ]; then
+      max=0
+      for d in "${existing_dirs[@]}"; do
+          # Extract the number before the first hyphen.
+          num=$(echo "$d" | cut -d '-' -f1)
+          if [[ $num =~ ^[0-9]+$ ]]; then
+              if (( num > max )); then
+                  max=$num
+              fi
+          fi
+      done
+      prefix=$((max+1))
+  fi
   
-  # Create the main output directory.
+  # Create the main output directory with the unique global prefix.
+  outdir="${prefix}-vulscan-results--${timestamp}"
   mkdir "$outdir"
   
   # Create subdirectory for individual results.
