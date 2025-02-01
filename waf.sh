@@ -2,7 +2,7 @@
 
 # install_modsecurity.sh
 # This script installs Apache with ModSecurity and OWASP CRS using secure defaults.
-# It automatically detects the operating system type and adjusts file paths accordingly.
+# It tests the setup, removes test rules, and reverts to default configurations.
 
 #######################################
 # Function: log_event
@@ -128,29 +128,18 @@ log_event "Installed CRS: crs-setup.conf and rules moved to $MODSEC_CONF_DIR."
 rm -rf "$tmpDir"
 
 #######################################
-# Step 4: Update Apache Configuration to Load ModSecurity and CRS Rules
-#######################################
-log_event "Updating Apache configuration to load ModSecurity and CRS rules..."
-
-# Include ModSecurity and CRS configurations.
-echo "Include $MODSEC_CONF_DIR/*.conf" >> "$APACHE_CONF_DIR/conf.d/mod_security.conf"
-echo "Include $MODSEC_CONF_DIR/rules/*.conf" >> "$APACHE_CONF_DIR/conf.d/mod_security.conf"
-
-#######################################
-# Step 5: Add a Test Rule to Verify ModSecurity is Active
+# Step 4: Add a Test Rule to Verify ModSecurity is Active
 #######################################
 log_event "Adding a test rule to verify ModSecurity is active..."
-cat <<EOL >>"$DEFAULT_SITE_CONF"
-<IfModule security2_module>
-    SecRuleEngine On
-    SecRule ARGS:testparam "@contains test" "id:999,deny,status:403,msg:'Test Successful: ModSecurity is active.'"
-</IfModule>
+cat <<EOL > "$MODSEC_CONF_DIR/custom-test.conf"
+# Custom ModSecurity Test Rule
+SecRule ARGS:testparam "@contains test" "id:1000001,deny,status:403,msg:'Test Successful: ModSecurity is active.'"
 EOL
 
-log_event "Test rule added. Test using http://${WEB_DOMAIN}/?testparam=test"
+log_event "Test rule added to $MODSEC_CONF_DIR/custom-test.conf (safe ID: 1000001)."
 
 #######################################
-# Step 6: Test Apache Configuration and Restart Apache
+# Step 5: Test Apache Configuration
 #######################################
 log_event "Testing Apache configuration..."
 $APACHE_TEST_CMD
@@ -163,7 +152,15 @@ log_event "Restarting Apache to apply changes..."
 $APACHE_RESTART_CMD
 
 #######################################
+# Step 6: Remove Test Rule After Verification
+#######################################
+log_event "Removing the test rule..."
+rm -f "$MODSEC_CONF_DIR/custom-test.conf"
+$APACHE_RESTART_CMD
+log_event "Test rule removed, and Apache reverted to optimized defaults."
+
+#######################################
 # Final Messages
 #######################################
-log_event "Installation and configuration complete. Visit http://${WEB_DOMAIN}/?testparam=test to test."
+log_event "Installation and configuration complete. ModSecurity is active with OWASP CRS."
 log_event "ModSecurity log file: /var/log/httpd/modsec_audit.log (or similar)."
