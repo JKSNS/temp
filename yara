@@ -87,3 +87,42 @@
    - **Expected Result**:
      - **`366Lab.pcap`** should match both **`match_both_pcaps`** (because it has “TCP”) and **`match_366Lab_only`** (because it has “crazyngp.com”).  
      - **`PING.pcap`** should match **`match_both_pcaps`** only (because it has “TCP”), but **not** `match_366Lab_only`.
+
+
+
+
+
+
+
+
+
+
+
+rule match_both_pcaps
+{
+    meta:
+        description = "Matches both PCAP files containing 'TCP'"
+        author = "YourName"
+        date = "2025-03-25"
+
+    strings:
+        $common_string = "TCP"
+
+    condition:
+        $common_string
+}
+
+rule match_366Lab_only
+{
+    meta:
+        description = "Matches only 366Lab.pcap by searching for 'crazyngp.com'"
+        author = "YourName"
+        date = "2025-03-25"
+
+    strings:
+        $unique_string = "crazyngp.com"
+
+    condition:
+        $unique_string
+}
+
