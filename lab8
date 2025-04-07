@@ -1,152 +1,286 @@
-## Part 1: Scenario-Based Snort 3 Rule Creation
+## Part 1: Scenario-Based Rules
 
-### **Scenario 1: Protecting $HOME_NET Against a LOIC HTTP Flood**
+### **Scenario 1: Protecting Against a LOIC HTTP Flood**
 
-#### **Objective**
-Detect and block an HTTP flood (using the “GET” method) from $EXTERNAL_NET that is associated with the LOIC DDoS tool.
+**Rule 1-1A – Alert on LOIC HTTP GET Flood:**
 
-#### **Iterative Steps**
+```snort
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
+    msg:"LOIC HTTP GET flood detected - alert";
+    flow:to_server,established;
+    content:"GET";
+    detection_filter: track by_src, count 10, seconds 1;
+    reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
+    sid:1000001;
+    rev:1;
+)
+```
 
-1. **Identify the Traffic Characteristics:**
-   - **Source:** $EXTERNAL_NET (external attackers)
-   - **Destination:** $HOME_NET (e.g., IP 10.10.10.10)
-   - **Protocol & Port:** TCP traffic to port 80 (HTTP)
-   - **Method:** HTTP “GET”
+**Rule 1-1B – Block (Drop) LOIC HTTP GET Flood:**
 
-2. **Decide on the Rule Components:**
-   - **Rule Header:** Define protocol, source/destination IP variables, and port.
-   - **Message:** A descriptive text for the alert.
-   - **Reference:** A URL pointing to background info (here, the LOIC Wikipedia page).
-   - **SID:** A unique identifier (choose a number >1,000,000).
-   - **Detection Filter:** Use the `detection_filter` option to limit alerts to when the HTTP GET flood exceeds a threshold (for example, 10 GET requests from a single source in 1 second).
-
-3. **Write the Alert Rule:**
-
-   ```snort
-   alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
-       msg:"LOIC HTTP GET flood detected - alert";
-       flow:to_server,established;
-       content:"GET";
-       detection_filter: track by_src, count 10, seconds 1;
-       reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
-       sid:1000001;
-       rev:1;
-   )
-   ```
-
-4. **Write the Block Rule:**
-
-   ```snort
-   drop tcp $EXTERNAL_NET any -> $HOME_NET 80 (
-       msg:"LOIC HTTP GET flood blocked - drop";
-       flow:to_server,established;
-       content:"GET";
-       detection_filter: track by_src, count 10, seconds 1;
-       reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
-       sid:1000002;
-       rev:1;
-   )
-   ```
-
-5. **Explanation Example:**
-   - *“These rules are effective because they specifically monitor HTTP GET requests from external sources targeting our protected network. The detection_filter ensures that if any source exceeds 10 GET requests per second, an alert is generated (or the connection is blocked). This helps mitigate a LOIC-based HTTP flood attack.”*
+```snort
+drop tcp $EXTERNAL_NET any -> $HOME_NET 80 (
+    msg:"LOIC HTTP GET flood blocked - drop";
+    flow:to_server,established;
+    content:"GET";
+    detection_filter: track by_src, count 10, seconds 1;
+    reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
+    sid:1000002;
+    rev:1;
+)
+```
 
 ---
 
-### **Scenario 2: Protecting Against a Ping of Death DDoS Attack**
+### **Scenario 2: Protecting Against a Ping of Death**
 
-#### **Objective**
-Alert and block ICMP packets (pings) that are abnormally large—specifically, those exceeding 60,000 bytes—while allowing normal pings.
+**Rule 1-2A – Alert on Ping of Death (ICMP with dsize >60000):**
 
-#### **Iterative Steps**
+```snort
+alert icmp any any -> $HOME_NET any (
+    msg:"Ping of Death detected - alert";
+    dsize:!0-60000;
+    reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
+    sid:1000003;
+    rev:1;
+)
+```
 
-1. **Identify the Traffic Characteristics:**
-   - **Protocol:** ICMP (used for pings)
-   - **Size Condition:** The “evil” pings are larger than 60,000 bytes.
-   - **Source:** Unknown (set as any) because you do not know the attacking IP.
+**Rule 1-2B – Block on Ping of Death:**
 
-2. **Decide on the Rule Components:**
-   - **Rule Header:** Specify ICMP, with any IP as source and $HOME_NET as destination.
-   - **Message:** Describe the detection.
-   - **Reference:** Link to the Ping of Death Wikipedia page.
-   - **SID:** Unique identifier.
-   - **dsize Option:** Use the `dsize` option with the “!” operator to match packets that are *not* in the normal range (0 to 60,000 bytes). In Snort, using `dsize:!0-60000;` triggers the rule for packets larger than 60,000 bytes.
-
-3. **Write the Alert Rule:**
-
-   ```snort
-   alert icmp any any -> $HOME_NET any (
-       msg:"Ping of Death detected - alert";
-       dsize:!0-60000;
-       reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
-       sid:1000003;
-       rev:1;
-   )
-   ```
-
-4. **Write the Block Rule:**
-
-   ```snort
-   drop icmp any any -> $HOME_NET any (
-       msg:"Ping of Death detected - block";
-       dsize:!0-60000;
-       reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
-       sid:1000004;
-       rev:1;
-   )
-   ```
-
-5. **Explanation Example:**
-   - *“These rules target ICMP packets that exceed the normal size limit by using the dsize option with the ‘!’ operator. This way, only packets with a size outside the 0–60,000 byte range are flagged. This selective approach ensures that only malicious pings (the ping of death) trigger alerts or are blocked.”*
+```snort
+drop icmp any any -> $HOME_NET any (
+    msg:"Ping of Death detected - block";
+    dsize:!0-60000;
+    reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
+    sid:1000004;
+    rev:1;
+)
+```
 
 ---
 
 ### **Scenario 3: Detecting Swoop’s Unauthorized Email**
 
-#### **Objective**
-Alert when Swoop (from the network 10.42.124.0/22) attempts to send an email containing the phrase “Cosmo’s Super-Secret Chocolate Milk Formula” via SMTP.
+**Rule 1-3 – Alert on SMTP Containing the Chocolate Milk Formula:**
 
-#### **Iterative Steps**
-
-1. **Identify the Traffic Characteristics:**
-   - **Source:** Swoop’s IP range (10.42.124.0/22)
-   - **Destination:** Unknown external IP (since the email is going out)
-   - **Protocol & Port:** TCP traffic on port 25 (SMTP)
-   - **Content:** Look for the unique text string in the email body.
-
-2. **Decide on the Rule Components:**
-   - **Rule Header:** Specify TCP from Swoop’s network to any external destination on port 25.
-   - **Message:** A descriptive alert message.
-   - **Reference:** Use a reference (for example, a URL about email security or simply a custom note).
-   - **SID:** Unique identifier.
-   - **Content Option:** Use the `content` option to search for “Cosmo’s Super-Secret Chocolate Milk Formula.”
-
-3. **Write the Alert Rule:**
-
-   ```snort
-   alert tcp 10.42.124.0/22 any -> any 25 (
-       msg:"Alert: Swoop attempting to email the chocolate milk formula";
-       flow:to_server,established;
-       content:"Cosmo's Super-Secret Chocolate Milk Formula";
-       reference:url,https://en.wikipedia.org/wiki/Email;
-       sid:1000005;
-       rev:1;
-   )
-   ```
-
-4. **Explanation Example:**
-   - *“This rule monitors SMTP traffic originating from the IP range associated with Swoop. By inspecting the content for the unique phrase ‘Cosmo’s Super-Secret Chocolate Milk Formula’, it accurately detects any attempt to send this sensitive information. The rule’s specificity minimizes false positives while ensuring that Swoop’s unauthorized email is promptly flagged.”*
-
----
-
-## **Testing Your Rules**
-
-Once you have written your rules, save them in a file (for example, `myrules.rules`) and test them using Snort with a command similar to:
-
-```bash
-snort -c /usr/local/etc/snort/snort.lua -R myrules.rules -r pcaps/yourtests.pcap
+```snort
+alert tcp 10.42.124.0/22 any -> any 25 (
+    msg:"Alert: Swoop attempting to email the chocolate milk formula";
+    flow:to_server,established;
+    content:"Cosmo's Super-Secret Chocolate Milk Formula";
+    reference:url,https://en.wikipedia.org/wiki/Email;
+    sid:1000005;
+    rev:1;
+)
 ```
 
-This command tells Snort to load your configuration and rules and then process the specified pcap file to see if your rules trigger as expected.
+---
+
+## Part 2: Forensic-Based Rules Using PCAPs
+
+### **2-1: Analysis of mystery.pcap (SYN Flood Detection)**
+
+**Rule 2-1A – Log Every TCP SYN Request:**
+
+```snort
+log tcp any any -> $HOME_NET any (
+    msg:"TCP SYN request logged";
+    flags:S;
+    reference:url,https://docs.snort.org/;
+    sid:2000001;
+    rev:1;
+)
+```
+
+**Rule 2-1B – Alert When More Than 8 SYNs/Second Occur:**
+
+```snort
+alert tcp any any -> $HOME_NET any (
+    msg:"Possible SYN flood attack detected - more than 8 SYNs per second";
+    flags:S;
+    detection_filter: track by_src, count 9, seconds 1;
+    reference:url,https://docs.snort.org/;
+    classtype:attempted-dos;
+    sid:2000002;
+    rev:1;
+)
+```
 
 ---
+
+### **2-2: Analysis of CCDC2022_ftpPasswordSpraying.pcap**
+
+**Rule 2-2A – Alert on FTP Login Attempt with “admin”:**
+
+```snort
+alert tcp any any -> $HOME_NET 21 (
+    msg:"FTP password spraying attempt with admin username";
+    content:"USER admin";
+    classtype:attempted-recon;
+    priority:1;
+    reference:url,https://snort.org/documents;
+    sid:2000003;
+    rev:1;
+)
+```
+
+**Rule 2-2B – Alert on FTP Login Attempt with “root”:**
+
+```snort
+alert tcp any any -> $HOME_NET 21 (
+    msg:"FTP password spraying attempt with root username";
+    content:"USER root";
+    classtype:attempted-recon;
+    priority:1;
+    reference:url,https://snort.org/documents;
+    sid:2000004;
+    rev:1;
+)
+```
+
+---
+
+### **2-3: Analysis of dhcp.pcap (DHCP Handshake Detection)**
+
+**Rule 2-3 – Alert on DHCP Request (using Hex-byte matching):**
+
+```snort
+alert udp any any -> 255.255.255.255 67 (
+    msg:"DHCP Request detected: client requesting IP 192.168.1.100";
+    content:"|35 01 03|";  # DHCP Message Type option (03 = DHCPREQUEST)
+    content:"192.168.1.100";  # Hard-coded requested IP address
+    sid:2000005;
+    rev:1;
+)
+```
+
+*Note:* Adjust the IP address (192.168.1.100) if your lab specifies a different target.
+
+---
+
+### **2-4: Analysis of amp.UDP.manyprotocols.pcapng (Detect Specific UDP Protocols)**
+
+**Rule 2-4A – Alert on DNS Traffic:**
+
+```snort
+alert udp any any -> $HOME_NET 53 (
+    msg:"DNS query detected";
+    reference:url,https://www.iana.org/domains/root;
+    sid:2000006;
+    rev:1;
+)
+```
+
+**Rule 2-4B – Alert on NTP Traffic:**
+
+```snort
+alert udp any any -> $HOME_NET 123 (
+    msg:"NTP traffic detected";
+    reference:url,https://en.wikipedia.org/wiki/Network_Time_Protocol;
+    sid:2000007;
+    rev:1;
+)
+```
+
+**Rule 2-4C – Alert on SNMP Traffic:**
+
+```snort
+alert udp any any -> $HOME_NET 161 (
+    msg:"SNMP traffic detected";
+    reference:url,https://en.wikipedia.org/wiki/Simple_Network_Management_Protocol;
+    sid:2000008;
+    rev:1;
+)
+```
+
+---
+
+### **2-5: Analysis of pkt.IPV4.randomprotofield.pcap (Specific IP Traffic Detection)**
+
+**Rule 2-5 – Alert on Traffic from 220.123.102.178 to 10.10.10.10:**
+
+```snort
+alert ip 220.123.102.178 any -> 10.10.10.10 any (
+    msg:"Traffic detected from 220.123.102.178 to 10.10.10.10";
+    sid:2000009;
+    rev:1;
+)
+```
+
+---
+
+## Part 3: Live Capture Rules
+
+### **3-1: Alert on HTTP Access to http://httpforever.com**
+
+```snort
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
+    msg:"HTTP access to httpforever.com detected";
+    flow:to_server,established;
+    http_header;
+    content:"Host|3A| httpforever.com";
+    sid:3000001;
+    rev:1;
+)
+```
+
+*Test by running Snort in live mode and then visiting http://httpforever.com in your browser.*
+
+---
+
+### **3-2: Additional Live-Capture Rules**
+
+For example, you might include rules for detecting FTP login attempts and Telnet session initiations in a high-density traffic environment:
+
+**Rule 3-2A – Alert on FTP Login Attempt (Live):**
+
+```snort
+alert tcp any any -> $HOME_NET 21 (
+    msg:"Live capture: FTP login attempt detected";
+    flow:to_server,established;
+    content:"USER";
+    sid:3000002;
+    rev:1;
+)
+```
+
+**Rule 3-2B – Alert on Telnet Session Initiation (Live):**
+
+```snort
+alert tcp any any -> $HOME_NET 23 (
+    msg:"Live capture: Telnet session initiated";
+    flow:to_server,established;
+    content:"Telnet";
+    sid:3000003;
+    rev:1;
+)
+```
+
+---
+
+## Testing Your Rules
+
+1. **Folder Structure Reminder:**  
+   - **L8Pcaps/** – Contains all the provided PCAP files.  
+   - **p1/** – Contains your Part 1 scenario-based rule files.  
+   - **p2/** – Contains your forensic (PCAP-based) rule files.  
+   - **p3/** – Contains your live-capture rule files.
+
+2. **Run a Test Command:**  
+   For example, to test the DHCP rule with the dhcp.pcap file, run:
+
+   ```bash
+   snort -c /usr/local/etc/snort/snort.lua -R p2/p3.rules -r L8Pcaps/dhcp.pcap
+   ```
+
+3. **Expected Outputs:**  
+   - **Alert Rules:** The console or log output should display your custom alert messages when matching traffic is detected.  
+   - **Drop Rules:** Even if running against a PCAP, an associated alert message should still appear.  
+   - **Detection Filters:** For instance, if using the SYN flood detection rule against mystery.pcap, you should see alerts only when the threshold is exceeded.  
+   - **Live Capture:** When running in live mode (e.g., for httpforever.com), you should see alerts in the terminal as you generate the traffic.
+
+4. **Verification:**  
+   Use Wireshark to verify that the PCAP files contain the expected traffic patterns (e.g., the DHCPREQUEST message, FTP login attempts, etc.).  
+   Adjust thresholds or content strings if necessary.
+
