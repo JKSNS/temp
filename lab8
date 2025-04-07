@@ -1,0 +1,152 @@
+## Part 1: Scenario-Based Snort 3 Rule Creation
+
+### **Scenario 1: Protecting $HOME_NET Against a LOIC HTTP Flood**
+
+#### **Objective**
+Detect and block an HTTP flood (using the “GET” method) from $EXTERNAL_NET that is associated with the LOIC DDoS tool.
+
+#### **Iterative Steps**
+
+1. **Identify the Traffic Characteristics:**
+   - **Source:** $EXTERNAL_NET (external attackers)
+   - **Destination:** $HOME_NET (e.g., IP 10.10.10.10)
+   - **Protocol & Port:** TCP traffic to port 80 (HTTP)
+   - **Method:** HTTP “GET”
+
+2. **Decide on the Rule Components:**
+   - **Rule Header:** Define protocol, source/destination IP variables, and port.
+   - **Message:** A descriptive text for the alert.
+   - **Reference:** A URL pointing to background info (here, the LOIC Wikipedia page).
+   - **SID:** A unique identifier (choose a number >1,000,000).
+   - **Detection Filter:** Use the `detection_filter` option to limit alerts to when the HTTP GET flood exceeds a threshold (for example, 10 GET requests from a single source in 1 second).
+
+3. **Write the Alert Rule:**
+
+   ```snort
+   alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
+       msg:"LOIC HTTP GET flood detected - alert";
+       flow:to_server,established;
+       content:"GET";
+       detection_filter: track by_src, count 10, seconds 1;
+       reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
+       sid:1000001;
+       rev:1;
+   )
+   ```
+
+4. **Write the Block Rule:**
+
+   ```snort
+   drop tcp $EXTERNAL_NET any -> $HOME_NET 80 (
+       msg:"LOIC HTTP GET flood blocked - drop";
+       flow:to_server,established;
+       content:"GET";
+       detection_filter: track by_src, count 10, seconds 1;
+       reference:url,https://en.wikipedia.org/wiki/Low_Orbit_Ion_Cannon;
+       sid:1000002;
+       rev:1;
+   )
+   ```
+
+5. **Explanation Example:**
+   - *“These rules are effective because they specifically monitor HTTP GET requests from external sources targeting our protected network. The detection_filter ensures that if any source exceeds 10 GET requests per second, an alert is generated (or the connection is blocked). This helps mitigate a LOIC-based HTTP flood attack.”*
+
+---
+
+### **Scenario 2: Protecting Against a Ping of Death DDoS Attack**
+
+#### **Objective**
+Alert and block ICMP packets (pings) that are abnormally large—specifically, those exceeding 60,000 bytes—while allowing normal pings.
+
+#### **Iterative Steps**
+
+1. **Identify the Traffic Characteristics:**
+   - **Protocol:** ICMP (used for pings)
+   - **Size Condition:** The “evil” pings are larger than 60,000 bytes.
+   - **Source:** Unknown (set as any) because you do not know the attacking IP.
+
+2. **Decide on the Rule Components:**
+   - **Rule Header:** Specify ICMP, with any IP as source and $HOME_NET as destination.
+   - **Message:** Describe the detection.
+   - **Reference:** Link to the Ping of Death Wikipedia page.
+   - **SID:** Unique identifier.
+   - **dsize Option:** Use the `dsize` option with the “!” operator to match packets that are *not* in the normal range (0 to 60,000 bytes). In Snort, using `dsize:!0-60000;` triggers the rule for packets larger than 60,000 bytes.
+
+3. **Write the Alert Rule:**
+
+   ```snort
+   alert icmp any any -> $HOME_NET any (
+       msg:"Ping of Death detected - alert";
+       dsize:!0-60000;
+       reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
+       sid:1000003;
+       rev:1;
+   )
+   ```
+
+4. **Write the Block Rule:**
+
+   ```snort
+   drop icmp any any -> $HOME_NET any (
+       msg:"Ping of Death detected - block";
+       dsize:!0-60000;
+       reference:url,https://en.wikipedia.org/wiki/Ping_of_death;
+       sid:1000004;
+       rev:1;
+   )
+   ```
+
+5. **Explanation Example:**
+   - *“These rules target ICMP packets that exceed the normal size limit by using the dsize option with the ‘!’ operator. This way, only packets with a size outside the 0–60,000 byte range are flagged. This selective approach ensures that only malicious pings (the ping of death) trigger alerts or are blocked.”*
+
+---
+
+### **Scenario 3: Detecting Swoop’s Unauthorized Email**
+
+#### **Objective**
+Alert when Swoop (from the network 10.42.124.0/22) attempts to send an email containing the phrase “Cosmo’s Super-Secret Chocolate Milk Formula” via SMTP.
+
+#### **Iterative Steps**
+
+1. **Identify the Traffic Characteristics:**
+   - **Source:** Swoop’s IP range (10.42.124.0/22)
+   - **Destination:** Unknown external IP (since the email is going out)
+   - **Protocol & Port:** TCP traffic on port 25 (SMTP)
+   - **Content:** Look for the unique text string in the email body.
+
+2. **Decide on the Rule Components:**
+   - **Rule Header:** Specify TCP from Swoop’s network to any external destination on port 25.
+   - **Message:** A descriptive alert message.
+   - **Reference:** Use a reference (for example, a URL about email security or simply a custom note).
+   - **SID:** Unique identifier.
+   - **Content Option:** Use the `content` option to search for “Cosmo’s Super-Secret Chocolate Milk Formula.”
+
+3. **Write the Alert Rule:**
+
+   ```snort
+   alert tcp 10.42.124.0/22 any -> any 25 (
+       msg:"Alert: Swoop attempting to email the chocolate milk formula";
+       flow:to_server,established;
+       content:"Cosmo's Super-Secret Chocolate Milk Formula";
+       reference:url,https://en.wikipedia.org/wiki/Email;
+       sid:1000005;
+       rev:1;
+   )
+   ```
+
+4. **Explanation Example:**
+   - *“This rule monitors SMTP traffic originating from the IP range associated with Swoop. By inspecting the content for the unique phrase ‘Cosmo’s Super-Secret Chocolate Milk Formula’, it accurately detects any attempt to send this sensitive information. The rule’s specificity minimizes false positives while ensuring that Swoop’s unauthorized email is promptly flagged.”*
+
+---
+
+## **Testing Your Rules**
+
+Once you have written your rules, save them in a file (for example, `myrules.rules`) and test them using Snort with a command similar to:
+
+```bash
+snort -c /usr/local/etc/snort/snort.lua -R myrules.rules -r pcaps/yourtests.pcap
+```
+
+This command tells Snort to load your configuration and rules and then process the specified pcap file to see if your rules trigger as expected.
+
+---
