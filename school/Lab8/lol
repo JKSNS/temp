@@ -1,8 +1,8 @@
+Thanks for sharing the rules — here’s a **quick audit** of each one to make sure it will fire properly, followed by suggested fixes **only if needed**.
 
-–––––––––––––––––––––––––––––––––––––––––––––––
-**Part 2: Forensic-based Snort 3 Rule Creation (Rules Requiring Screenshots)**
+---
 
-**2-2 (Alert – FTP Password Spraying):**  
+### ✅ **2-2 (FTP Password Spraying):**
 ```snort
 alert tcp any any -> $HOME_NET 21 (
     msg:"FTP password spraying attempt with admin username";
@@ -13,13 +13,20 @@ alert tcp any any -> $HOME_NET 21 (
     sid:2000003;
     rev:1;
 )
-```  
-**2-2-1 (Screenshot):**  
-*(Insert screenshot of the Snort detection module output for the FTP password spraying rule here)*
+```
+
+✅ **Good as-is.**  
+📌 Just be aware: `content:"USER admin"` is **case-sensitive** by default. If the packet contains `User admin` or `user admin`, it won’t match.
+
+💡 **Improved version (for reliability):**
+```snort
+content:"USER admin";
+nocase;
+```
 
 ---
 
-**2-3 (Alert – DHCP Request):**  
+### ⚠️ **2-3 (DHCP Request - may not work reliably):**
 ```snort
 alert udp any any -> 255.255.255.255 67 (
     msg:"DHCP Request detected: client requesting IP 192.168.1.100";
@@ -28,27 +35,43 @@ alert udp any any -> 255.255.255.255 67 (
     sid:2000005;
     rev:1;
 )
-```  
-**2-3-1 (Screenshot):**  
-*(Insert screenshot of the alert output showing the DHCP request detection here)*
+```
+
+⚠️ **Needs adjustment.** DHCP requests **do not include the IP in ASCII.** You’re trying to match `"192.168.1.100"` as text, but DHCP uses **binary/hex format**.
+
+💡 **Fix: Use Hex for IP**
+```snort
+content:"|C0 A8 01 64|";  # This is 192.168.1.100 in hex
+```
+
+✅ **Fixed version:**
+```snort
+alert udp any any -> 255.255.255.255 67 (
+    msg:"DHCP Request detected: client requesting IP 192.168.1.100";
+    content:"|35 01 03|";
+    content:"|C0 A8 01 64|";
+    sid:2000005;
+    rev:2;
+)
+```
 
 ---
 
-**2-5 (Alert – Specific IP Traffic):**  
+### ✅ **2-5 (Specific IP Communication):**
 ```snort
 alert ip 220.123.102.178 any -> 10.10.10.10 any (
     msg:"Traffic detected from 220.123.102.178 to 10.10.10.10";
     sid:2000009;
     rev:1;
 )
-```  
-**2-5-1 (Screenshot):**  
-*(Insert screenshot of the alert count or Snort console output for this rule here)*
+```
 
-–––––––––––––––––––––––––––––––––––––––––––––––
-**Part 3: Live Capture Snort 3 Rule Creation (Rules Requiring Screenshots)**
+✅ **Good to go.**  
+💡 Optional: You can add `classtype` or `reference`, but it's fine without them.
 
-**3-1 (Alert – HTTP Site Access):**  
+---
+
+### ✅ **3-1 (HTTP Host Detection):**
 ```snort
 alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
     msg:"HTTP access to httpforever.com detected";
@@ -58,15 +81,19 @@ alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
     sid:3000001;
     rev:1;
 )
-```  
-**3-1-1 (Screenshot):**  
-*(Insert screenshot showing the alert in your terminal with your browser displaying http://httpforever.com)*
+```
+
+✅ **This rule looks solid.**  
+📌 Make sure:
+- You're accessing `http://httpforever.com` (not HTTPS)
+- Your NIC is in promiscuous mode
+- The traffic actually hits port 80
 
 ---
 
-**3-2 (Alerts – Live Capture Rules):**  
+### ✅ **3-2 (TLS + HTTP Refresh):**
 
-*Rule 1 – TLS Handshake Detection:*  
+#### TLS Handshake:
 ```snort
 alert tcp $EXTERNAL_NET any -> $HOME_NET 443 (
     msg:"TLS handshake (ClientHello) detected";
@@ -77,9 +104,14 @@ alert tcp $EXTERNAL_NET any -> $HOME_NET 443 (
     sid:3000002;
     rev:1;
 )
-```  
+```
 
-*Rule 2 – HTTP Refresh Detection:*  
+✅ **This is a decent low-effort TLS trigger**, though not highly specific.  
+💡 Optional improvement: add a 3rd content match for `|01|` at offset 5 for ClientHello.
+
+---
+
+#### HTTP Refresh:
 ```snort
 alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
     msg:"HTTP refresh detected via Cache-Control header";
@@ -90,35 +122,22 @@ alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (
     sid:3000003;
     rev:1;
 )
-```  
-
-**3-2-2 (Screenshot PCAP):**  
-*(Insert screenshot of your packet capture (e.g., Wireshark output) showing the TLS handshake and HTTP refresh packets)*
-
-**3-2-3 (Screenshot Rules):**  
-*(Insert screenshot of your final rule file displaying the above live capture rules)*
-
-–––––––––––––––––––––––––––––––––––––––––––––––
-**Command to Test Your Rules**  
-To verify your Snort rules with a PCAP file, run the following command (adjusting the file names as appropriate):
-
-```bash
-snort -c /usr/local/etc/snort/snort.lua -R nameofyourrulefile.rules -r pcaps/yourtests.pcap
 ```
 
-For example, if you are testing your forensic-based rules:  
-- Test the FTP password spraying rule using:  
-  ```bash
-  snort -c /usr/local/etc/snort/snort.lua -R your_rules.rules -r pcaps/CCDC2022_ftpPasswordSpraying.pcap
-  ```
-- Test the DHCP rule using:  
-  ```bash
-  snort -c /usr/local/etc/snort/snort.lua -R your_rules.rules -r pcaps/dhcp.pcap
-  ```
-- Test the IPv4 traffic rule using:  
-  ```bash
-  snort -c /usr/local/etc/snort/snort.lua -R your_rules.rules -r pcaps/IPv4.pcap
-  ```
+✅ **Looks good.**  
+📌 Trigger this by **manually refreshing** a page in your browser (F5).
 
-For your live capture rules (Part 3), if you have saved the capture as a PCAP file, use its filename instead of _yourtests.pcap_; otherwise, run Snort in live mode as required.
+---
 
+### ✅ Summary of Fixes:
+
+| Rule | Status | Fix Needed? | Suggestion |
+|------|--------|-------------|------------|
+| 2-2  | ✅ Valid | Optional | Add `nocase` for reliability |
+| 2-3  | ⚠️ Broken | ✅ Yes | Change `"192.168.1.100"` to `|C0 A8 01 64|` |
+| 2-5  | ✅ Valid | No | Optional: add `classtype` |
+| 3-1  | ✅ Valid | No | Ensure you use HTTP, not HTTPS |
+| 3-2 TLS | ✅ Valid | Optional | Add more precise content match |
+| 3-2 Refresh | ✅ Valid | No | Refresh a browser tab to trigger |
+
+Let me know if you want me to auto-generate a `.rules` file with the fixed versions.
